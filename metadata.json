@@ -1,0 +1,5 @@
+{
+  "name": "Copy of AI Meal Planner (Thai)",
+  "description": "An AI-powered weekly meal planner that generates meal ideas for two people (lunch and dinner) and creates a corresponding shopping list. Users can customize the plan and even adapt it based on available ingredients.",
+  "requestFramePermissions": []
+}
