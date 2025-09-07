@@ -1,6 +1,7 @@
 import { SavedPlan } from '../types';
+import { FIREBASE_PROJECT_ID } from '../firebase';
 
-const BASE_URL = `https://firestore.googleapis.com/v1/projects/${'ai-meal-planner-3f494'}/databases/(default)/documents`;
+const BASE_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 
 // Helper to convert a JavaScript value to Firestore's typed value format
 const toFirestoreValue = (value: any): any => {
@@ -102,8 +103,8 @@ export const getSavedPlans = async (userId: string, idToken: string): Promise<Sa
             }
         });
         if (!response.ok) {
-            // If the user document path doesn't exist, Firestore returns a 404, which is not an error but an empty list.
-            if(response.status === 404) return [];
+            // A collection query to a non-existent path returns 200 OK with an empty documents array, not a 404.
+            // A 403 (Permission Denied) is the most likely error if rules are incorrect.
             const errorData = await response.json();
             console.error('Firestore fetch error:', errorData);
             throw new Error('Failed to fetch plans from Firestore.');

@@ -78,7 +78,8 @@ export const useMealPlanner = () => {
         setIsDashboardLoading(true);
         setError(null);
         try {
-            const idToken = await currentUser.getIdToken();
+            // Force-refresh the token to ensure it's not stale.
+            const idToken = await currentUser.getIdToken(true);
             const plansFromDb = await getSavedPlans(currentUser.uid, idToken);
             setSavedPlans(plansFromDb);
 
@@ -202,7 +203,8 @@ export const useMealPlanner = () => {
             mealIngredients: mealIngredients
         };
         
-        const idToken = await currentUser.getIdToken();
+        // Force-refresh the token before saving.
+        const idToken = await currentUser.getIdToken(true);
         await savePlan(newPlan, currentUser.uid, idToken);
         
         const updatedSavedPlans = [newPlan, ...savedPlans];
