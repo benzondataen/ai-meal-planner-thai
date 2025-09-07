@@ -35,8 +35,9 @@ export interface ActivePlan {
 }
 
 export enum AppState {
+  AUTH_LOADING,
+  LOGIN,
   DASHBOARD,
-  WELCOME, // Kept for flow continuity if needed, but dashboard is primary
   LOADING,
   PLANNING,
   SHOPPING_LIST,

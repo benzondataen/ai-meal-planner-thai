@@ -4,13 +4,15 @@ import { MealPlanView } from './components/MealPlanView';
 import { ShoppingListView } from './components/ShoppingListView';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { useMealPlanner } from './hooks/useMealPlanner';
-import { AppState, MealDay, SavedPlan } from './types';
+import { AppState } from './types';
 import { DashboardView } from './components/DashboardView';
 import { SavedPlanDetailView } from './components/SavedPlanDetailView';
+import { LoginView } from './components/LoginView';
 
 function App() {
     const {
         appState,
+        currentUser,
         mealPlan,
         shoppingList,
         allSuggestedMeals,
@@ -18,6 +20,8 @@ function App() {
         savedPlans,
         selectedPlan,
         activePlan,
+        isDashboardLoading,
+        handleLogout,
         handleGeneratePlan,
         handleUpdateMeal,
         handleFinalizePlan,
@@ -31,6 +35,10 @@ function App() {
 
     const renderContent = () => {
         switch (appState) {
+            case AppState.AUTH_LOADING:
+                return <div className="flex justify-center items-center h-64"><p>กำลังตรวจสอบการยืนยันตัวตน...</p></div>;
+            case AppState.LOGIN:
+                return <LoginView />;
             case AppState.DASHBOARD:
                 return <DashboardView 
                     savedPlans={savedPlans}
@@ -38,7 +46,9 @@ function App() {
                     onNewPlan={handleGeneratePlan} 
                     onViewPlan={handleViewPlan} 
                     onContinuePlan={handleContinuePlan}
-                    error={error} />;
+                    error={error}
+                    isDashboardLoading={isDashboardLoading}
+                    />;
             case AppState.PLANNING:
                 return <MealPlanView 
                     mealPlan={mealPlan} 
@@ -53,17 +63,17 @@ function App() {
                     onSavePlan={handleSavePlan}
                     />;
             case AppState.VIEW_SAVED_PLAN:
-                return selectedPlan ? <SavedPlanDetailView plan={selectedPlan} onBack={reset} /> : <DashboardView savedPlans={savedPlans} activePlan={activePlan} onNewPlan={handleGeneratePlan} onViewPlan={handleViewPlan} onContinuePlan={handleContinuePlan} error={"ไม่พบแผนที่เลือก"} />;
+                return selectedPlan ? <SavedPlanDetailView plan={selectedPlan} onBack={reset} /> : <DashboardView savedPlans={savedPlans} activePlan={activePlan} onNewPlan={handleGeneratePlan} onViewPlan={handleViewPlan} onContinuePlan={handleContinuePlan} isDashboardLoading={isDashboardLoading} error={"ไม่พบแผนที่เลือก"} />;
             default:
-                return <DashboardView savedPlans={savedPlans} activePlan={activePlan} onNewPlan={handleGeneratePlan} onViewPlan={handleViewPlan} onContinuePlan={handleContinuePlan} error={error} />;
+                return <LoginView />;
         }
     }
 
     return (
         <div className="min-h-screen bg-gray-50 font-sans">
-            <Header onReset={reset} />
+            <Header onReset={reset} userEmail={currentUser?.email || null} onLogout={handleLogout} />
             <main className="container mx-auto px-4 sm:px-6 lg:p-8 py-10">
-                {appState === AppState.LOADING && <LoadingSpinner />}
+                {(appState === AppState.LOADING || appState === AppState.AUTH_LOADING) && <LoadingSpinner />}
                 {renderContent()}
             </main>
         </div>

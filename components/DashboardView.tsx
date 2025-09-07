@@ -8,10 +8,11 @@ interface DashboardViewProps {
   onNewPlan: () => void;
   onViewPlan: (planId: string) => void;
   onContinuePlan: () => void;
+  isDashboardLoading: boolean;
   error?: string | null;
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({ savedPlans, activePlan, onNewPlan, onViewPlan, onContinuePlan, error }) => {
+export const DashboardView: React.FC<DashboardViewProps> = ({ savedPlans, activePlan, onNewPlan, onViewPlan, onContinuePlan, isDashboardLoading, error }) => {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="text-center mb-10">
@@ -50,7 +51,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ savedPlans, active
 
       <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
         <h3 className="text-xl font-bold text-gray-800 mb-4 border-b pb-2">แผนอาหารที่บันทึกไว้</h3>
-        {savedPlans.length > 0 ? (
+        {isDashboardLoading ? (
+             <p className="text-center text-gray-500 py-8">กำลังโหลดแผนอาหาร...</p>
+        ) : savedPlans.length > 0 ? (
           <ul className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
             {savedPlans.map(plan => (
               <li key={plan.id}>
