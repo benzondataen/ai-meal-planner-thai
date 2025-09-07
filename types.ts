@@ -31,6 +31,7 @@ export interface SavedPlan {
 export interface ActivePlan {
     mealPlan: MealDay[];
     shoppingList: Ingredient[];
+    mealIngredients: Record<string, MealIngredientInfo[]>;
 }
 
 export enum AppState {
@@ -39,7 +40,5 @@ export enum AppState {
   LOADING,
   PLANNING,
   SHOPPING_LIST,
-  ADAPTING,
-  FINAL_PLAN_RESULT, // Renamed from FINAL_PLAN
   VIEW_SAVED_PLAN,
 }

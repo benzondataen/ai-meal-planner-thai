@@ -7,8 +7,7 @@ interface ShoppingListViewProps {
   shoppingList: Ingredient[];
   onToggleItem: (itemName: string) => void;
   onNavigate: (state: AppState) => void;
-  onFinalizeShopping: () => void;
-  error?: string | null;
+  onSavePlan: () => void;
 }
 
 const CategoryFilterButton: React.FC<{ category: string; isActive: boolean; onClick: () => void; }> = ({ category, isActive, onClick }) => (
@@ -24,7 +23,7 @@ const CategoryFilterButton: React.FC<{ category: string; isActive: boolean; onCl
   </button>
 );
 
-export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ shoppingList, onToggleItem, onNavigate, onFinalizeShopping, error }) => {
+export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ shoppingList, onToggleItem, onNavigate, onSavePlan }) => {
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [modalData, setModalData] = useState<{ name: string; usedIn?: string[] } | null>(null);
 
@@ -71,12 +70,6 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ shoppingList
               ติ๊กรายการที่คุณซื้อแล้ว และกดปุ่ม (i) เพื่อดูเมนูที่เกี่ยวข้อง
             </p>
           </div>
-          
-          {error && (
-            <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-md" role="alert">
-              <p>{error}</p>
-            </div>
-          )}
 
           <div className="mb-6">
             <p className="text-sm font-medium text-gray-600 mb-3">ตัวกรองหมวดหมู่:</p>
@@ -139,10 +132,10 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ shoppingList
                       กลับไปแก้ไขเมนู
                   </button>
                   <button
-                      onClick={onFinalizeShopping}
+                      onClick={onSavePlan}
                       className="w-full sm:w-auto bg-teal-600 text-white font-bold py-3 px-6 rounded-full hover:bg-teal-700 focus:outline-none focus:ring-4 focus:ring-teal-300 transition duration-300"
                   >
-                      ยืนยันการซื้อและอัปเดตเมนู
+                      บันทึกแผนและสิ้นสุด
                   </button>
               </div>
           </div>

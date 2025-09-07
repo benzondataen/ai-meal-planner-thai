@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { AppState, MealDay, Ingredient, Meal, SavedPlan, MealIngredientInfo, ActivePlan } from '../types';
-import { generateInitialMealPlan, regenerateShoppingList, adaptPlanFromPurchasedIngredients } from '../services/geminiService';
+import { generateInitialMealPlan, generateShoppingListAndIngredients } from '../services/geminiService';
 
 const SAVED_PLANS_STORAGE_KEY = 'mealPlannerSavedPlans';
 const ACTIVE_PLAN_STORAGE_KEY = 'mealPlannerActivePlan';
@@ -36,7 +36,7 @@ export const useMealPlanner = () => {
   const [allSuggestedMeals, setAllSuggestedMeals] = useState<Meal[]>([]);
   const [error, setError] = useState<string | null>(null);
   
-  const [finalMealIngredients, setFinalMealIngredients] = useState<Record<string, MealIngredientInfo[]>>({});
+  const [mealIngredients, setMealIngredients] = useState<Record<string, MealIngredientInfo[]>>({});
   const [savedPlans, setSavedPlans] = useState<SavedPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<SavedPlan | null>(null);
   const [activePlan, setActivePlan] = useState<ActivePlan | null>(null);
@@ -101,10 +101,15 @@ export const useMealPlanner = () => {
     setAppState(AppState.LOADING);
     setError(null);
     try {
-      const newShoppingList = await regenerateShoppingList(mealPlan);
+      const { shoppingList: newShoppingList, mealIngredients: newMealIngredients } = await generateShoppingListAndIngredients(mealPlan);
       setShoppingList(newShoppingList);
+      setMealIngredients(newMealIngredients);
       
-      const newActivePlan = { mealPlan, shoppingList: newShoppingList };
+      const newActivePlan: ActivePlan = { 
+        mealPlan, 
+        shoppingList: newShoppingList,
+        mealIngredients: newMealIngredients,
+      };
       setActivePlan(newActivePlan);
       localStorage.setItem(ACTIVE_PLAN_STORAGE_KEY, JSON.stringify(newActivePlan));
       
@@ -127,29 +132,6 @@ export const useMealPlanner = () => {
         localStorage.setItem(ACTIVE_PLAN_STORAGE_KEY, JSON.stringify(updatedActivePlan));
     }
   };
-  
-  const handleFinalizeShopping = useCallback(async () => {
-    const purchasedIngredients = shoppingList.filter(item => item.checked);
-    if (purchasedIngredients.length === 0) {
-        setError("กรุณาเลือกวัตถุดิบที่ซื้อมาอย่างน้อย 1 รายการ");
-        setTimeout(() => setError(null), 3000);
-        return;
-    }
-    setAppState(AppState.LOADING);
-    setError(null);
-    try {
-        const { mealPlan: newPlan, mealIngredients } = await adaptPlanFromPurchasedIngredients(purchasedIngredients);
-        const mergedPlan = mergeMealDays(newPlan);
-        setMealPlan(mergedPlan);
-        setFinalMealIngredients(mealIngredients);
-        setShoppingList([]);
-        clearActivePlan(); // Plan is finished
-        setAppState(AppState.FINAL_PLAN_RESULT);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
-      setAppState(AppState.SHOPPING_LIST);
-    }
-  }, [shoppingList, clearActivePlan]);
 
   const handleSavePlan = () => {
     const now = new Date();
@@ -157,7 +139,7 @@ export const useMealPlanner = () => {
       id: now.toISOString(),
       createdAt: now.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }),
       mealPlan: mealPlan,
-      mealIngredients: finalMealIngredients
+      mealIngredients: mealIngredients
     };
     const updatedSavedPlans = [newPlan, ...savedPlans];
     setSavedPlans(updatedSavedPlans);
@@ -167,7 +149,7 @@ export const useMealPlanner = () => {
     setMealPlan([]);
     setShoppingList([]);
     setAllSuggestedMeals([]);
-    setFinalMealIngredients({});
+    setMealIngredients({});
     setError(null);
     clearActivePlan(); // Also clear active plan on save
     setAppState(AppState.DASHBOARD);
@@ -197,6 +179,7 @@ export const useMealPlanner = () => {
     if (activePlan) {
         setMealPlan(activePlan.mealPlan);
         setShoppingList(activePlan.shoppingList);
+        setMealIngredients(activePlan.mealIngredients || {});
         setAppState(AppState.SHOPPING_LIST);
     }
   }, [activePlan]);
@@ -214,7 +197,6 @@ export const useMealPlanner = () => {
     handleUpdateMeal,
     handleFinalizePlan,
     toggleIngredientChecked,
-    handleFinalizeShopping,
     handleSavePlan,
     handleViewPlan,
     reset,
