@@ -78,7 +78,8 @@ export const useMealPlanner = () => {
         setIsDashboardLoading(true);
         setError(null);
         try {
-            const plansFromDb = await getSavedPlans(currentUser.uid);
+            const idToken = await currentUser.getIdToken();
+            const plansFromDb = await getSavedPlans(currentUser.uid, idToken);
             setSavedPlans(plansFromDb);
 
             const storedActivePlan = localStorage.getItem(ACTIVE_PLAN_STORAGE_KEY);
@@ -201,7 +202,8 @@ export const useMealPlanner = () => {
             mealIngredients: mealIngredients
         };
         
-        await savePlan(newPlan, currentUser.uid);
+        const idToken = await currentUser.getIdToken();
+        await savePlan(newPlan, currentUser.uid, idToken);
         
         const updatedSavedPlans = [newPlan, ...savedPlans];
         setSavedPlans(updatedSavedPlans);

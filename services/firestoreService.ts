@@ -1,7 +1,6 @@
-import { FIREBASE_PROJECT_ID, FIREBASE_API_KEY } from '../firebase';
 import { SavedPlan } from '../types';
 
-const BASE_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
+const BASE_URL = `https://firestore.googleapis.com/v1/projects/${'ai-meal-planner-3f494'}/databases/(default)/documents`;
 
 // Helper to convert a JavaScript value to Firestore's typed value format
 const toFirestoreValue = (value: any): any => {
@@ -95,12 +94,18 @@ const toFirestoreDocument = (plan: Omit<SavedPlan, 'id'>) => {
 };
 
 
-export const getSavedPlans = async (userId: string): Promise<SavedPlan[]> => {
+export const getSavedPlans = async (userId: string, idToken: string): Promise<SavedPlan[]> => {
     try {
-        const response = await fetch(`${BASE_URL}/users/${userId}/plans?key=${FIREBASE_API_KEY}&orderBy=createdAt desc`);
+        const response = await fetch(`${BASE_URL}/users/${userId}/plans?orderBy=createdAt desc`, {
+            headers: {
+                'Authorization': `Bearer ${idToken}`
+            }
+        });
         if (!response.ok) {
-            // If the user document doesn't exist, Firestore returns a 404, which is not an error but an empty list.
+            // If the user document path doesn't exist, Firestore returns a 404, which is not an error but an empty list.
             if(response.status === 404) return [];
+            const errorData = await response.json();
+            console.error('Firestore fetch error:', errorData);
             throw new Error('Failed to fetch plans from Firestore.');
         }
         const data = await response.json();
@@ -115,16 +120,17 @@ export const getSavedPlans = async (userId: string): Promise<SavedPlan[]> => {
     }
 };
 
-export const savePlan = async (plan: SavedPlan, userId: string): Promise<void> => {
+export const savePlan = async (plan: SavedPlan, userId: string, idToken: string): Promise<void> => {
     try {
         const { id, ...planData } = plan;
         const firestoreDoc = toFirestoreDocument(planData);
         
         // The path now includes the user's UID to scope the data
-        const response = await fetch(`${BASE_URL}/users/${userId}/plans?documentId=${id}&key=${FIREBASE_API_KEY}`, {
+        const response = await fetch(`${BASE_URL}/users/${userId}/plans?documentId=${id}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`
             },
             body: JSON.stringify(firestoreDoc),
         });
