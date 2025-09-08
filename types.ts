@@ -46,5 +46,10 @@ export enum AppState {
 
 export interface Ad {
   linkUrl: string;
+  // This will now hold the fetched preview image URL.
   imageUrl: string;
+  // These will hold the fetched metadata from the link.
+  // Fix: Made title and description required. The data fetching logic always provides these, and this change fixes a downstream type predicate error.
+  title: string;
+  description: string;
 }

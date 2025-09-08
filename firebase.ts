@@ -1,5 +1,8 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+
+// Fix for Error: Module '"firebase/auth"' has no exported member 'getAuth'.
+// Switched to Firebase v8 compatibility syntax for auth initialization.
+import firebase from "firebase/compat/app";
+import "firebase/compat/auth";
 
 // These constants are also used by the Firestore REST service
 export const FIREBASE_PROJECT_ID = "ai-meal-planner-3f494";
@@ -15,7 +18,10 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 
 // Initialize Firebase Authentication and get a reference to the service
-export const auth = getAuth(app);
+export const auth = firebase.auth();
+export default firebase;

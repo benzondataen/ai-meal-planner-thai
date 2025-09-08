@@ -1,11 +1,9 @@
-import { GoogleGenAI, Type } from "@google/genai";
+
+import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { MealDay, Ingredient, MealIngredientInfo } from '../types';
+import { FIREBASE_API_KEY } from '../firebase';
 
-if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable is not set.");
-}
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: FIREBASE_API_KEY });
 
 const model = 'gemini-2.5-flash';
 
@@ -97,7 +95,7 @@ export const generateInitialMealPlan = async (): Promise<{ mealPlan: MealDay[], 
     const prompt = `สร้างแผนการทำอาหารสำหรับ 2 สัปดาห์ สำหรับ 2 คน วันละ 2 มื้อ (กลางวันและเย็น) โดยเน้นเมนูที่ทำง่ายในคอนโดและไม่ซับซ้อน พร้อมทั้งรายการวัตถุดิบทั้งหมดที่ต้องซื้อสำหรับทุกเมนูในสัปดาห์นั้นๆ โดยต้องจัดหมวดหมู่วัตถุดิบด้วย (เช่น ผัก, เนื้อสัตว์, เครื่องปรุง, ของแห้ง, อื่นๆ) สำหรับวัตถุดิบแต่ละรายการใน shopping list ให้เพิ่ม key 'usedIn' ซึ่งเป็น array ของชื่อเมนูอาหารที่ต้องใช้วัตถุดิบนั้นๆ จัดรูปแบบผลลัพธ์เป็น JSON object ที่มี key 'mealPlan' และ 'shoppingList'.`;
 
     try {
-        const response = await ai.models.generateContent({
+        const response: GenerateContentResponse = await ai.models.generateContent({
             model,
             contents: prompt,
             config: {
@@ -106,6 +104,7 @@ export const generateInitialMealPlan = async (): Promise<{ mealPlan: MealDay[], 
             },
         });
         
+        // Fix: Correctly access the generated text from the response object.
         const jsonString = response.text.trim();
         const data = JSON.parse(jsonString);
         return {
@@ -126,7 +125,7 @@ export const generateShoppingListAndIngredients = async (mealPlan: MealDay[]): P
 จัดรูปแบบผลลัพธ์เป็น JSON object ที่มี key 'shoppingList' และ 'mealIngredients'.`;
 
     try {
-        const response = await ai.models.generateContent({
+        const response: GenerateContentResponse = await ai.models.generateContent({
             model,
             contents: prompt,
             config: {
@@ -135,6 +134,7 @@ export const generateShoppingListAndIngredients = async (mealPlan: MealDay[]): P
             },
         });
 
+        // Fix: Correctly access the generated text from the response object.
         const jsonString = response.text.trim();
         const data = JSON.parse(jsonString);
         

@@ -39,7 +39,9 @@ function App() {
 
     useEffect(() => {
       const fetchAds = async () => {
+        console.log("App.tsx: Fetching ads...");
         const adData = await getAds();
+        console.log("App.tsx: Ads fetched:", adData);
         setAds(adData);
       };
       fetchAds();
@@ -50,7 +52,7 @@ function App() {
             case AppState.AUTH_LOADING:
                 return <div className="flex justify-center items-center h-64"><p>กำลังตรวจสอบการยืนยันตัวตน...</p></div>;
             case AppState.LOGIN:
-                return <LoginView />;
+                return <LoginView ads={ads} />;
             case AppState.DASHBOARD:
                 return <DashboardView 
                     savedPlans={savedPlans}
@@ -77,7 +79,7 @@ function App() {
             case AppState.VIEW_SAVED_PLAN:
                 return selectedPlan ? <SavedPlanDetailView plan={selectedPlan} onBack={reset} /> : <DashboardView savedPlans={savedPlans} activePlan={activePlan} onNewPlan={handleGeneratePlan} onViewPlan={handleViewPlan} onContinuePlan={handleContinuePlan} isDashboardLoading={isDashboardLoading} error={"ไม่พบแผนที่เลือก"} />;
             default:
-                return <LoginView />;
+                return <LoginView ads={ads} />;
         }
     }
 
@@ -87,10 +89,16 @@ function App() {
         <div className="min-h-screen bg-gray-50 font-sans">
             <Header onReset={reset} userEmail={currentUser?.email || null} onLogout={handleLogout} />
             <main className="container mx-auto px-4 sm:px-6 lg:p-8 py-10">
-                {isLoading && <LoadingSpinner />}
-                {isLoading && ads.length > 0 && <AdPopup ads={ads} />}
                 {renderContent()}
             </main>
+            
+            {/* Show overlays on top of the content */}
+            {isLoading && (
+                <>
+                    <LoadingSpinner />
+                    {ads.length > 0 && <AdPopup ads={ads} />}
+                </>
+            )}
         </div>
     );
 }

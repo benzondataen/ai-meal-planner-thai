@@ -1,9 +1,12 @@
+
 import { useState, useCallback, useEffect } from 'react';
 import { AppState, MealDay, Ingredient, Meal, SavedPlan, MealIngredientInfo, ActivePlan } from '../types';
 import { generateInitialMealPlan, generateShoppingListAndIngredients } from '../services/geminiService';
 import { getSavedPlans, savePlan } from '../services/firestoreService';
-import { auth } from '../firebase';
-import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import firebase, { auth } from '../firebase';
+// Fix for errors on line 6: Module '"firebase/auth"' has no exported member 'onAuthStateChanged', 'signOut', or 'User'.
+// Switched to v8 compatibility syntax.
+// import 'firebase/auth-compat'; // This is redundant as it's handled in firebase.ts
 
 
 const ACTIVE_PLAN_STORAGE_KEY = 'mealPlannerActivePlan';
@@ -34,7 +37,9 @@ const mergeMealDays = (plan: MealDay[]): MealDay[] => {
 
 export const useMealPlanner = () => {
   const [appState, setAppState] = useState<AppState>(AppState.AUTH_LOADING);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // Fix for Error: Module '"firebase/auth"' has no exported member 'User'. Changed User to firebase.User.
+  // The error on this line is resolved by fixing the Firebase imports in `firebase.ts`.
+  const [currentUser, setCurrentUser] = useState<firebase.User | null>(null);
   const [mealPlan, setMealPlan] = useState<MealDay[]>([]);
   const [shoppingList, setShoppingList] = useState<Ingredient[]>([]);
   const [allSuggestedMeals, setAllSuggestedMeals] = useState<Meal[]>([]);
@@ -48,7 +53,8 @@ export const useMealPlanner = () => {
 
   // Listen for auth state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, user => {
+    // Fix for Error: Module '"firebase/auth"' has no exported member 'onAuthStateChanged'. Changed to auth.onAuthStateChanged.
+    const unsubscribe = auth.onAuthStateChanged(user => {
       setCurrentUser(user);
       if (user) {
         setAppState(AppState.DASHBOARD);
@@ -105,7 +111,8 @@ export const useMealPlanner = () => {
   
   const handleLogout = async () => {
     try {
-        await signOut(auth);
+        // Fix for Error: Module '"firebase/auth"' has no exported member 'signOut'. Changed to auth.signOut().
+        await auth.signOut();
         // onAuthStateChanged will handle the rest
     } catch (error) {
         console.error("Error signing out: ", error);

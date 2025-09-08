@@ -37,23 +37,36 @@ export const AdPopup: React.FC<AdPopupProps> = ({ ads }) => {
   }
 
   const currentAd = shuffledAds[currentAdIndex];
+  
+  const domain = useMemo(() => {
+        try {
+            return new URL(currentAd.linkUrl).hostname.replace('www.', '');
+        } catch {
+            return '';
+        }
+    }, [currentAd.linkUrl]);
+
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:top-1/2 md:-translate-y-1/2 md:bottom-auto w-auto max-w-xs z-60">
-      <div className="relative bg-white rounded-lg shadow-2xl p-2 transition-all duration-300 ease-in-out">
+    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:top-auto md:bottom-4 w-auto max-w-xs z-60">
+      <div className="relative bg-white rounded-lg shadow-2xl transition-all duration-300 ease-in-out overflow-hidden">
         <button
           onClick={() => setIsVisible(false)}
-          className="absolute -top-2 -right-2 bg-gray-800 text-white rounded-full h-7 w-7 flex items-center justify-center text-lg z-10 hover:bg-black"
+          className="absolute top-2 right-2 bg-gray-800 text-white rounded-full h-6 w-6 flex items-center justify-center text-sm z-10 hover:bg-black"
           aria-label="Close Ad"
         >
           &times;
         </button>
-        <a href={currentAd.linkUrl} target="_blank" rel="noopener noreferrer" className="block">
-          <img
-            src={currentAd.imageUrl}
-            alt="Advertisement"
-            className="w-full h-auto object-cover rounded-md"
-          />
+        
+        <a href={currentAd.linkUrl} target="_blank" rel="noopener noreferrer" className="block no-underline">
+            {currentAd.imageUrl && (
+                <img src={currentAd.imageUrl} alt={currentAd.title || 'Ad Image'} className="w-full h-32 object-cover" />
+            )}
+             <div className="p-3">
+                <p className="text-xs text-gray-500 mb-1 font-semibold uppercase tracking-wider">โฆษณา</p>
+                <span className="text-xs text-gray-500 uppercase font-semibold">{domain}</span>
+                <h4 className="font-bold text-gray-800 text-sm truncate">{currentAd.title || currentAd.linkUrl}</h4>
+            </div>
         </a>
       </div>
     </div>
