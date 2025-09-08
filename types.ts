@@ -43,3 +43,8 @@ export enum AppState {
   SHOPPING_LIST,
   VIEW_SAVED_PLAN,
 }
+
+export interface Ad {
+  linkUrl: string;
+  imageUrl: string;
+}

@@ -1,13 +1,15 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import { MealPlanView } from './components/MealPlanView';
 import { ShoppingListView } from './components/ShoppingListView';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { useMealPlanner } from './hooks/useMealPlanner';
-import { AppState } from './types';
+import { Ad, AppState } from './types';
 import { DashboardView } from './components/DashboardView';
 import { SavedPlanDetailView } from './components/SavedPlanDetailView';
 import { LoginView } from './components/LoginView';
+import { getAds } from './services/adsService';
+import { AdPopup } from './components/AdPopup';
 
 function App() {
     const {
@@ -32,6 +34,16 @@ function App() {
         navigateTo,
         handleContinuePlan
     } = useMealPlanner();
+
+    const [ads, setAds] = useState<Ad[]>([]);
+
+    useEffect(() => {
+      const fetchAds = async () => {
+        const adData = await getAds();
+        setAds(adData);
+      };
+      fetchAds();
+    }, []);
 
     const renderContent = () => {
         switch (appState) {
@@ -69,11 +81,14 @@ function App() {
         }
     }
 
+    const isLoading = appState === AppState.LOADING || appState === AppState.AUTH_LOADING;
+
     return (
         <div className="min-h-screen bg-gray-50 font-sans">
             <Header onReset={reset} userEmail={currentUser?.email || null} onLogout={handleLogout} />
             <main className="container mx-auto px-4 sm:px-6 lg:p-8 py-10">
-                {(appState === AppState.LOADING || appState === AppState.AUTH_LOADING) && <LoadingSpinner />}
+                {isLoading && <LoadingSpinner />}
+                {isLoading && ads.length > 0 && <AdPopup ads={ads} />}
                 {renderContent()}
             </main>
         </div>
