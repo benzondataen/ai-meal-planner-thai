@@ -1,5 +1,4 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ChefHatIcon } from './icons/ChefHatIcon';
 import firebase, { auth } from '../firebase';
 // Fix for errors on line 4: Module '"firebase/auth"' has no exported member 'GoogleAuthProvider' or 'signInWithPopup'.
@@ -8,7 +7,7 @@ import firebase, { auth } from '../firebase';
 import { Ad } from '../types';
 
 const GoogleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-    <svg xmlns="http://www.w.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
         <path fill="#4285F4" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
         <path fill="#34A853" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l5.657,5.657C40.078,36.659,44,30.836,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
         <path fill="#FBBC05" d="M9.804,28.99c-0.456-1.354-0.71-2.793-0.71-4.29s0.254-2.936,0.71-4.29l-5.657-5.657C2.353,17.9,2,20.846,2,24s0.353,6.1,1.148,8.843L9.804,28.99z" />
@@ -17,32 +16,14 @@ const GoogleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     </svg>
 );
 
-const AdCard: React.FC<{ ad: Ad }> = ({ ad }) => {
-    const domain = useMemo(() => {
-        try {
-            return new URL(ad.linkUrl).hostname.replace('www.', '');
-        } catch {
-            return '';
-        }
-    }, [ad.linkUrl]);
-
-    return (
-        <div className="my-8 w-full">
-             <p className="text-xs text-gray-500 mb-2 font-semibold uppercase tracking-wider text-left">โฆษณา</p>
-            <a href={ad.linkUrl} target="_blank" rel="noopener noreferrer" className="block bg-gray-100 rounded-lg shadow-inner overflow-hidden text-left no-underline hover:bg-gray-200 transition-colors">
-                {ad.imageUrl && (
-                    <img src={ad.imageUrl} alt={ad.title || 'Ad image'} className="w-full h-40 object-cover" />
-                )}
-                <div className="p-4">
-                    <span className="text-xs text-gray-500 uppercase font-semibold">{domain}</span>
-                    <h4 className="font-bold text-gray-800 truncate">{ad.title || ad.linkUrl}</h4>
-                    {ad.description && (
-                        <p className="text-sm text-gray-600 mt-1 line-clamp-2">{ad.description}</p>
-                    )}
-                </div>
-            </a>
-        </div>
-    );
+// Fisher-Yates shuffle algorithm to randomize ad order
+const shuffleArray = (array: Ad[]) => {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
 };
 
 
@@ -51,20 +32,38 @@ interface LoginViewProps {
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ ads }) => {
+  console.log("LoginView received ads props:", ads);
   const [error, setError] = useState<string | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [currentAdIndex, setCurrentAdIndex] = useState(0);
 
-  const randomAd = useMemo(() => {
-    if (!ads || ads.length === 0) return null;
-    return ads[Math.floor(Math.random() * ads.length)];
+  // Shuffle ads only once when the component mounts or the ad list changes
+  const shuffledAds = useMemo(() => {
+    if (!ads || ads.length === 0) return [];
+    return shuffleArray(ads);
   }, [ads]);
+
+  // Rotate ad every 20 seconds
+  useEffect(() => {
+    if (shuffledAds.length > 1) {
+      const intervalId = setInterval(() => {
+        setCurrentAdIndex(prevIndex => (prevIndex + 1) % shuffledAds.length);
+      }, 10000); // 20 seconds
+
+      return () => clearInterval(intervalId);
+    }
+  }, [shuffledAds.length]);
+
 
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
     setError(null);
+    // Fix for Error: Module '"firebase/auth"' has no exported member 'GoogleAuthProvider'.
     const provider = new firebase.auth.GoogleAuthProvider();
     try {
+      // Fix for Error: Module '"firebase/auth"' has no exported member 'signInWithPopup'.
       await auth.signInWithPopup(provider);
+      // onAuthStateChanged in useMealPlanner will handle navigation
     } catch (err: any) {
       if (err.code !== 'auth/popup-closed-by-user') {
         setError('ไม่สามารถลงชื่อเข้าใช้ได้ กรุณาลองอีกครั้ง');
@@ -74,6 +73,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ ads }) => {
       setIsSigningIn(false);
     }
   };
+  
+  const currentAd = shuffledAds.length > 0 ? shuffledAds[currentAdIndex] : null;
 
   return (
     <div className="flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
@@ -87,7 +88,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ ads }) => {
         ลงชื่อเข้าใช้ด้วยบัญชี Google เพื่อเริ่มสร้างแผนอาหารและบันทึกข้อมูลของคุณ
       </p>
 
-      {randomAd && <AdCard ad={randomAd} />}
+      {currentAd && (
+        <div className="my-8 w-full p-4 bg-gray-100 rounded-lg shadow-inner text-left">
+          <p className="text-xs text-gray-500 mb-1 font-semibold uppercase tracking-wider">โฆษณา</p>
+          <a href={currentAd.linkUrl} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline break-words text-sm">
+            {currentAd.linkUrl}
+          </a>
+        </div>
+      )}
 
       {error && (
         <p className="text-red-500 text-sm mb-4">{error}</p>
