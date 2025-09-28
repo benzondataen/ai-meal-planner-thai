@@ -5,18 +5,13 @@ interface IngredientUsageModalProps {
   isOpen: boolean;
   onClose: () => void;
   ingredientName: string;
-  mealNames?: string[];
+  mealUsage: Map<string, number>;
 }
 
-export const IngredientUsageModal: React.FC<IngredientUsageModalProps> = ({ isOpen, onClose, ingredientName, mealNames = [] }) => {
+export const IngredientUsageModal: React.FC<IngredientUsageModalProps> = ({ isOpen, onClose, ingredientName, mealUsage }) => {
   const mealCounts = useMemo(() => {
-    if (!mealNames) return [];
-    const counts: Record<string, number> = {};
-    for (const name of mealNames) {
-      counts[name] = (counts[name] || 0) + 1;
-    }
-    return Object.entries(counts);
-  }, [mealNames]);
+    return Array.from(mealUsage.entries());
+  }, [mealUsage]);
 
   if (!isOpen) {
     return null;
@@ -49,12 +44,12 @@ export const IngredientUsageModal: React.FC<IngredientUsageModalProps> = ({ isOp
         <div className="border-t border-gray-200 mt-4 pt-4">
           {mealCounts.length > 0 ? (
             <ul className="space-y-2 max-h-60 overflow-y-auto pr-2">
-              {mealCounts.map(([name, count]) => (
+              {mealCounts.map(([name, totalServings]) => (
                 <li key={name} className="flex justify-between items-center text-gray-700 bg-gray-50 p-3 rounded-lg">
                   <span className="truncate pr-2">{name}</span>
-                  {count > 1 && (
+                  {totalServings > 1 && (
                     <span className="flex-shrink-0 text-sm font-semibold text-white bg-teal-500 rounded-full px-2.5 py-0.5">
-                      x{count}
+                      x{totalServings}
                     </span>
                   )}
                 </li>

@@ -1,13 +1,32 @@
 import React, { useState, useMemo } from 'react';
-import { Ingredient, AppState } from '../types';
+import { Ingredient, AppState, AdditionalExpense, OcrResult, MealDay, MealIngredientInfo } from '../types';
 import { IngredientUsageModal } from './IngredientUsageModal';
 import { InfoIcon } from './icons/InfoIcon';
+import { OcrModal } from './OcrModal';
+import { CameraIcon } from './icons/CameraIcon';
 
 interface ShoppingListViewProps {
+  mealPlan: MealDay[];
+  mealIngredients: Record<string, MealIngredientInfo[]>;
   shoppingList: Ingredient[];
+  additionalExpenses: AdditionalExpense[];
   onToggleItem: (itemName: string) => void;
+  onToggleAllItems: () => void;
   onNavigate: (state: AppState) => void;
   onSavePlan: () => void;
+  onUpdateIngredientPrice: (itemName: string, price: number) => void;
+  onAddAdditionalExpense: (expense: Omit<AdditionalExpense, 'id'>) => void;
+  onRemoveAdditionalExpense: (expenseId: string) => void;
+  
+  // OCR Props
+  isOcrModalOpen: boolean;
+  isOcrLoading: boolean;
+  isMatchingOcr: boolean;
+  ocrResults: OcrResult[];
+  openOcrModal: () => void;
+  closeOcrModal: () => void;
+  handleProcessReceipt: (file: File) => void;
+  handleApplyOcrResults: (selectedItems: OcrResult[]) => Promise<number>;
 }
 
 const CategoryFilterButton: React.FC<{ category: string; isActive: boolean; onClick: () => void; }> = ({ category, isActive, onClick }) => (
@@ -23,9 +42,53 @@ const CategoryFilterButton: React.FC<{ category: string; isActive: boolean; onCl
   </button>
 );
 
-export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ shoppingList, onToggleItem, onNavigate, onSavePlan }) => {
+const AddExpenseForm: React.FC<{ onAdd: (expense: Omit<AdditionalExpense, 'id'>) => void }> = ({ onAdd }) => {
+    const [name, setName] = useState('');
+    const [price, setPrice] = useState('');
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const priceValue = parseFloat(price);
+        if (name.trim() && !isNaN(priceValue) && priceValue >= 0) {
+            onAdd({ name: name.trim(), price: priceValue });
+            setName('');
+            setPrice('');
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2 mt-2">
+            <input 
+                type="text" 
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="ชื่อรายการ" 
+                className="flex-grow p-2 border border-gray-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500"
+            />
+            <input 
+                type="number" 
+                value={price}
+                onChange={e => setPrice(e.target.value)}
+                placeholder="ราคา (บาท)" 
+                className="w-full sm:w-28 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500"
+                min="0"
+                step="0.25"
+            />
+            <button type="submit" className="bg-teal-500 text-white font-semibold py-2 px-4 rounded-md hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500">
+                เพิ่ม
+            </button>
+        </form>
+    );
+};
+
+
+export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ 
+    mealPlan, mealIngredients, shoppingList, additionalExpenses, onToggleItem, onToggleAllItems, onNavigate, onSavePlan, onUpdateIngredientPrice, onAddAdditionalExpense, onRemoveAdditionalExpense,
+    isOcrModalOpen, isOcrLoading, isMatchingOcr, ocrResults, openOcrModal, closeOcrModal, handleProcessReceipt, handleApplyOcrResults
+}) => {
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
-  const [modalData, setModalData] = useState<{ name: string; usedIn?: string[] } | null>(null);
+  const [modalData, setModalData] = useState<{ name: string; mealUsage: Map<string, number> } | null>(null);
+  const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
 
   const { categorizedItems, categories } = useMemo(() => {
     const categorized = shoppingList.reduce((acc, item, index) => {
@@ -60,16 +123,57 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ shoppingList
   const purchasedCount = shoppingList.filter(item => item.checked).length;
   const totalCount = shoppingList.length;
 
+  const shoppingListTotal = useMemo(() => shoppingList.reduce((sum, item) => sum + (item.price || 0), 0), [shoppingList]);
+  const additionalExpensesTotal = useMemo(() => additionalExpenses.reduce((sum, item) => sum + item.price, 0), [additionalExpenses]);
+  const grandTotal = shoppingListTotal + additionalExpensesTotal;
+  
+  const handleApplyOcrWithAlert = async (selectedItems: OcrResult[]) => {
+      const initialPurchasedCount = purchasedCount;
+      const matchedCount = await handleApplyOcrResults(selectedItems);
+      const newPurchasedCount = shoppingList.filter(item => item.checked).length;
+      const remainingCount = totalCount - newPurchasedCount;
+      setConfirmationMessage(`จับคู่สำเร็จ ${matchedCount} รายการ! ยังเหลืออีก ${remainingCount} รายการที่ต้องตรวจสอบ`);
+      // Auto-dismiss message after 5 seconds
+      setTimeout(() => setConfirmationMessage(null), 5000);
+  };
+
+  const handleShowUsage = (ingredientName: string) => {
+    const usage = new Map<string, number>();
+    if (!mealPlan || !mealIngredients) return;
+
+    for (const day of mealPlan) {
+      for (const mealType of ['breakfast', 'lunch', 'dinner'] as const) {
+        const meal = day[mealType];
+        if (!meal?.name) continue;
+
+        const ingredientsForMeal = mealIngredients[meal.name];
+        if (ingredientsForMeal?.some(ing => ing.name === ingredientName)) {
+          const currentTotal = usage.get(meal.name) || 0;
+          usage.set(meal.name, currentTotal + (meal.servings || 0));
+        }
+      }
+    }
+    setModalData({ name: ingredientName, mealUsage: usage });
+  };
+
+
   return (
     <>
       <div className="p-4 sm:p-6 lg:p-8">
-        <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl p-6 sm:p-8">
+        <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl p-6 sm:p-8">
           <div className="text-center mb-6">
-            <h2 className="text-3xl font-extrabold text-gray-800">รายการของที่ต้องซื้อ</h2>
+            <h2 className="text-3xl font-extrabold text-gray-800">รายการของที่ต้องซื้อและค่าใช้จ่าย</h2>
             <p className="mt-2 text-lg text-gray-600">
-              ติ๊กรายการที่คุณซื้อแล้ว และกดปุ่ม (i) เพื่อดูเมนูที่เกี่ยวข้อง
+              ใส่ราคาของแต่ละรายการ หรือใช้ตัวช่วยสแกนใบเสร็จเพื่อความรวดเร็ว
             </p>
           </div>
+          
+          {confirmationMessage && (
+            <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-6 rounded-md" role="alert">
+                <p>{confirmationMessage}</p>
+            </div>
+          )}
+
 
           <div className="mb-6">
             <p className="text-sm font-medium text-gray-600 mb-3">ตัวกรองหมวดหมู่:</p>
@@ -81,7 +185,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ shoppingList
             </div>
           </div>
 
-          <div className="space-y-6 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+          <div className="space-y-6 max-h-[45vh] overflow-y-auto pr-2 custom-scrollbar">
             {filteredCategories.map(category => (
               <div key={category}>
                 <h3 className="text-lg font-bold text-teal-700 border-b-2 border-teal-100 pb-2 mb-3">{category}</h3>
@@ -89,7 +193,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ shoppingList
                   {categorizedItems[category].map((item) => (
                     <li
                       key={item.name}
-                      className="flex items-center p-3 bg-gray-50 rounded-lg"
+                      className="flex items-center p-3 bg-gray-50 rounded-lg flex-wrap sm:flex-nowrap gap-2"
                     >
                       <div className="flex items-center flex-grow cursor-pointer" onClick={() => onToggleItem(item.name)}>
                         <input
@@ -103,16 +207,28 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ shoppingList
                           {item.name}
                         </span>
                       </div>
-                      <span className={`ml-3 text-sm font-medium ${item.checked ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() => setModalData({ name: item.name, usedIn: item.usedIn })}
-                        className="ml-4 p-1 text-gray-400 hover:text-teal-600 rounded-full hover:bg-teal-100 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors"
-                        aria-label={`Show meals for ${item.name}`}
-                      >
-                        <InfoIcon className="w-5 h-5" />
-                      </button>
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+                        <span className={`text-sm font-medium ${item.checked ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {item.quantity}
+                        </span>
+                        <input
+                            type="number"
+                            value={item.price || ''}
+                            onChange={(e) => onUpdateIngredientPrice(item.name, parseFloat(e.target.value))}
+                            className="w-24 p-1 border border-gray-300 rounded-md shadow-sm text-right focus:ring-teal-500 focus:border-teal-500"
+                            placeholder="ราคา"
+                            min="0"
+                            step="0.25"
+                        />
+                         <span className="text-sm text-gray-500">บาท</span>
+                        <button
+                          onClick={() => handleShowUsage(item.name)}
+                          className="p-1 text-gray-400 hover:text-teal-600 rounded-full hover:bg-teal-100 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors"
+                          aria-label={`Show meals for ${item.name}`}
+                        >
+                          <InfoIcon className="w-5 h-5" />
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -120,9 +236,57 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ shoppingList
             ))}
           </div>
           
-          <div className="mt-8 pt-6 border-t">
+           <div className="mt-8 pt-6 border-t">
+              <h3 className="text-lg font-bold text-gray-800 mb-2">รายจ่ายเพิ่มเติม</h3>
+              <p className="text-sm text-gray-500 mb-3">เพิ่มรายการอื่นๆ ที่ซื้อในสัปดาห์นี้ เช่น ของใช้ในบ้าน</p>
+              <div className="space-y-2 mb-4">
+                {additionalExpenses.map(exp => (
+                    <div key={exp.id} className="flex justify-between items-center p-2 bg-gray-50 rounded-md">
+                        <span className="text-gray-700">{exp.name}</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-600">{exp.price.toFixed(2)} บาท</span>
+                            <button onClick={() => onRemoveAdditionalExpense(exp.id)} className="text-red-400 hover:text-red-600">&times;</button>
+                        </div>
+                    </div>
+                ))}
+              </div>
+              <AddExpenseForm onAdd={onAddAdditionalExpense} />
+           </div>
+
+          <div className="mt-8 pt-6 border-t-2 border-dashed">
+             <div className="flex items-center justify-center mb-6">
+                <button
+                    onClick={openOcrModal}
+                    className="flex items-center gap-2 bg-blue-500 text-white font-bold py-2 px-5 rounded-full hover:bg-blue-600 focus:outline-none focus:ring-4 focus:ring-blue-300 transition duration-300"
+                >
+                    <CameraIcon className="w-5 h-5" />
+                    สแกนใบเสร็จ
+                </button>
+            </div>
+              <div className="space-y-2 mb-6">
+                <div className="flex justify-between items-center text-md">
+                    <span className="text-gray-600">รวมค่าวัตถุดิบ:</span>
+                    <span className="font-semibold text-gray-800">{shoppingListTotal.toFixed(2)} บาท</span>
+                </div>
+                 <div className="flex justify-between items-center text-md">
+                    <span className="text-gray-600">รวมรายจ่ายเพิ่มเติม:</span>
+                    <span className="font-semibold text-gray-800">{additionalExpensesTotal.toFixed(2)} บาท</span>
+                </div>
+                 <div className="flex justify-between items-center text-xl">
+                    <span className="font-bold text-gray-800">ยอดรวมทั้งหมด:</span>
+                    <span className="font-bold text-teal-600">{grandTotal.toFixed(2)} บาท</span>
+                </div>
+              </div>
               <div className="flex justify-between items-center mb-4">
-                  <span className="text-lg font-bold text-gray-800">ทั้งหมด: {purchasedCount} / {totalCount} รายการ</span>
+                  <span className="text-lg font-bold text-gray-800">เช็คแล้ว: {purchasedCount} / {totalCount} รายการ</span>
+                  {totalCount > 0 && (
+                      <button
+                          onClick={onToggleAllItems}
+                          className="text-sm font-semibold text-teal-600 hover:text-teal-800 transition-colors"
+                      >
+                          {purchasedCount === totalCount ? 'ยกเลิกการเลือกทั้งหมด' : 'เลือกทั้งหมด'}
+                      </button>
+                  )}
               </div>
               <div className="flex flex-col sm:flex-row justify-center gap-4">
                   <button
@@ -132,10 +296,10 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ shoppingList
                       กลับไปแก้ไขเมนู
                   </button>
                   <button
-                      onClick={onSavePlan}
+                      onClick={() => onNavigate(AppState.WEEKLY_SUMMARY)}
                       className="w-full sm:w-auto bg-teal-600 text-white font-bold py-3 px-6 rounded-full hover:bg-teal-700 focus:outline-none focus:ring-4 focus:ring-teal-300 transition duration-300"
                   >
-                      บันทึกแผนและสิ้นสุด
+                      ไปที่หน้าสรุปค่าใช้จ่าย
                   </button>
               </div>
           </div>
@@ -145,7 +309,17 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ shoppingList
         isOpen={modalData !== null}
         onClose={() => setModalData(null)}
         ingredientName={modalData?.name || ''}
-        mealNames={modalData?.usedIn}
+        mealUsage={modalData?.mealUsage || new Map()}
+      />
+      <OcrModal 
+        isOpen={isOcrModalOpen}
+        onClose={closeOcrModal}
+        isLoading={isOcrLoading}
+        isApplyingResults={isMatchingOcr}
+        ocrResults={ocrResults}
+        onProcessReceipt={handleProcessReceipt}
+        onApplyResults={handleApplyOcrWithAlert}
+        shoppingListTotalItems={totalCount}
       />
     </>
   );

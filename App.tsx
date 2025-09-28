@@ -4,12 +4,14 @@ import { MealPlanView } from './components/MealPlanView';
 import { ShoppingListView } from './components/ShoppingListView';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { useMealPlanner } from './hooks/useMealPlanner';
-import { Ad, AppState } from './types';
+import { Ad, AppState, MealIngredientInfo } from './types';
 import { DashboardView } from './components/DashboardView';
 import { SavedPlanDetailView } from './components/SavedPlanDetailView';
 import { LoginView } from './components/LoginView';
 import { getAds } from './services/adsService';
 import { AdPopup } from './components/AdPopup';
+import { WeeklySummaryView } from './components/WeeklySummaryView';
+import { SettingsModal } from './components/SettingsModal';
 
 function App() {
     const {
@@ -17,22 +19,40 @@ function App() {
         currentUser,
         mealPlan,
         shoppingList,
-        allSuggestedMeals,
+        additionalExpenses,
+        mealIngredients,
         error,
         savedPlans,
         selectedPlan,
         activePlan,
         isDashboardLoading,
+        isSettingsModalOpen,
+        isOcrModalOpen,
+        isOcrLoading,
+        ocrResults,
+        isMatchingOcr,
         handleLogout,
-        handleGeneratePlan,
+        handleOpenNewPlanSettings,
+        handleStartGeneration,
         handleUpdateMeal,
+        handleUpdateServings,
+        handleAddMealToHistory,
         handleFinalizePlan,
         toggleIngredientChecked,
+        handleToggleAllIngredients,
+        handleUpdateIngredientPrice,
+        handleAddAdditionalExpense,
+        handleRemoveAdditionalExpense,
         handleSavePlan,
         handleViewPlan,
         reset,
         navigateTo,
-        handleContinuePlan
+        handleContinuePlan,
+        handleProcessReceipt,
+        handleApplyOcrResults,
+        openOcrModal,
+        closeOcrModal,
+        closeSettingsModal,
     } = useMealPlanner();
 
     const [ads, setAds] = useState<Ad[]>([]);
@@ -57,7 +77,7 @@ function App() {
                 return <DashboardView 
                     savedPlans={savedPlans}
                     activePlan={activePlan} 
-                    onNewPlan={handleGeneratePlan} 
+                    onNewPlan={handleOpenNewPlanSettings} 
                     onViewPlan={handleViewPlan} 
                     onContinuePlan={handleContinuePlan}
                     error={error}
@@ -66,18 +86,45 @@ function App() {
             case AppState.PLANNING:
                 return <MealPlanView 
                     mealPlan={mealPlan} 
-                    allSuggestedMeals={allSuggestedMeals} 
                     onUpdateMeal={handleUpdateMeal} 
-                    onFinalize={handleFinalizePlan} />;
+                    onUpdateServings={handleUpdateServings}
+                    onFinalize={handleFinalizePlan}
+                    onAddMealToHistory={handleAddMealToHistory}
+                    />;
             case AppState.SHOPPING_LIST:
                 return <ShoppingListView 
+                    mealPlan={mealPlan}
+                    mealIngredients={mealIngredients as Record<string, MealIngredientInfo[]>}
                     shoppingList={shoppingList} 
+                    additionalExpenses={additionalExpenses}
                     onToggleItem={toggleIngredientChecked} 
+                    onToggleAllItems={handleToggleAllIngredients}
                     onNavigate={navigateTo}
                     onSavePlan={handleSavePlan}
+                    onUpdateIngredientPrice={handleUpdateIngredientPrice}
+                    onAddAdditionalExpense={handleAddAdditionalExpense}
+                    onRemoveAdditionalExpense={handleRemoveAdditionalExpense}
+                    // OCR Props
+                    isOcrModalOpen={isOcrModalOpen}
+                    isOcrLoading={isOcrLoading}
+                    isMatchingOcr={isMatchingOcr}
+                    ocrResults={ocrResults}
+                    openOcrModal={openOcrModal}
+                    closeOcrModal={closeOcrModal}
+                    handleProcessReceipt={handleProcessReceipt}
+                    handleApplyOcrResults={handleApplyOcrResults}
+                    />;
+            case AppState.WEEKLY_SUMMARY:
+                return <WeeklySummaryView
+                    shoppingList={shoppingList}
+                    additionalExpenses={additionalExpenses}
+                    onNavigate={navigateTo}
+                    onSavePlan={handleSavePlan}
+                    onAddAdditionalExpense={handleAddAdditionalExpense}
+                    onRemoveAdditionalExpense={handleRemoveAdditionalExpense}
                     />;
             case AppState.VIEW_SAVED_PLAN:
-                return selectedPlan ? <SavedPlanDetailView plan={selectedPlan} onBack={reset} /> : <DashboardView savedPlans={savedPlans} activePlan={activePlan} onNewPlan={handleGeneratePlan} onViewPlan={handleViewPlan} onContinuePlan={handleContinuePlan} isDashboardLoading={isDashboardLoading} error={"ไม่พบแผนที่เลือก"} />;
+                return selectedPlan ? <SavedPlanDetailView plan={selectedPlan} onBack={reset} /> : <DashboardView savedPlans={savedPlans} activePlan={activePlan} onNewPlan={handleOpenNewPlanSettings} onViewPlan={handleViewPlan} onContinuePlan={handleContinuePlan} isDashboardLoading={isDashboardLoading} error={"ไม่พบแผนที่เลือก"} />;
             default:
                 return <LoginView ads={ads} />;
         }
@@ -92,6 +139,12 @@ function App() {
                 {renderContent()}
             </main>
             
+            <SettingsModal 
+                isOpen={isSettingsModalOpen}
+                onClose={closeSettingsModal}
+                onSubmit={handleStartGeneration}
+            />
+
             {/* Show overlays on top of the content */}
             {isLoading && (
                 <>

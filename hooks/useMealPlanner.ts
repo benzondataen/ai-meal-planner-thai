@@ -1,48 +1,21 @@
-
 import { useState, useCallback, useEffect } from 'react';
-import { AppState, MealDay, Ingredient, Meal, SavedPlan, MealIngredientInfo, ActivePlan } from '../types';
-import { generateInitialMealPlan, generateShoppingListAndIngredients } from '../services/geminiService';
+import { AppState, MealDay, Ingredient, Meal, SavedPlan, MealIngredientInfo, ActivePlan, AdditionalExpense, OcrResult, MatchedItemPair, PlannerSettings } from '../types';
+import { generateInitialMealPlan, generateShoppingListAndIngredients, processReceiptImage, matchOcrItemsToShoppingList } from '../services/geminiService';
 import { getSavedPlans, savePlan } from '../services/firestoreService';
 import firebase, { auth } from '../firebase';
-// Fix for errors on line 6: Module '"firebase/auth"' has no exported member 'onAuthStateChanged', 'signOut', or 'User'.
-// Switched to v8 compatibility syntax.
-// import 'firebase/auth-compat'; // This is redundant as it's handled in firebase.ts
+import { addMealToHistory } from '../services/mealHistoryService';
+import { fileToBase64 } from '../utils/imageUtils';
+import { fuzzySearch } from '../utils/fuzzySearch';
 
 
 const ACTIVE_PLAN_STORAGE_KEY = 'mealPlannerActivePlan';
 
-const mergeMealDays = (plan: MealDay[]): MealDay[] => {
-    const dayMap = new Map<string, MealDay>();
-    const dayOrder: string[] = [];
-
-    plan.forEach(dayEntry => {
-        if (!dayEntry) return;
-
-        if (!dayMap.has(dayEntry.day)) {
-            dayMap.set(dayEntry.day, { day: dayEntry.day, lunch: null, dinner: null });
-            dayOrder.push(dayEntry.day);
-        }
-        
-        const existingDay = dayMap.get(dayEntry.day)!;
-        if (dayEntry.lunch) {
-            existingDay.lunch = dayEntry.lunch;
-        }
-        if (dayEntry.dinner) {
-            existingDay.dinner = dayEntry.dinner;
-        }
-    });
-
-    return dayOrder.map(day => dayMap.get(day)!);
-};
-
 export const useMealPlanner = () => {
   const [appState, setAppState] = useState<AppState>(AppState.AUTH_LOADING);
-  // Fix for Error: Module '"firebase/auth"' has no exported member 'User'. Changed User to firebase.User.
-  // The error on this line is resolved by fixing the Firebase imports in `firebase.ts`.
   const [currentUser, setCurrentUser] = useState<firebase.User | null>(null);
   const [mealPlan, setMealPlan] = useState<MealDay[]>([]);
   const [shoppingList, setShoppingList] = useState<Ingredient[]>([]);
-  const [allSuggestedMeals, setAllSuggestedMeals] = useState<Meal[]>([]);
+  const [additionalExpenses, setAdditionalExpenses] = useState<AdditionalExpense[]>([]);
   const [error, setError] = useState<string | null>(null);
   
   const [mealIngredients, setMealIngredients] = useState<Record<string, MealIngredientInfo[]>>({});
@@ -50,19 +23,26 @@ export const useMealPlanner = () => {
   const [selectedPlan, setSelectedPlan] = useState<SavedPlan | null>(null);
   const [activePlan, setActivePlan] = useState<ActivePlan | null>(null);
   const [isDashboardLoading, setIsDashboardLoading] = useState<boolean>(true);
+  
+  // Settings Modal State
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
-  // Listen for auth state changes
+  // OCR State
+  const [isOcrModalOpen, setIsOcrModalOpen] = useState(false);
+  const [isOcrLoading, setIsOcrLoading] = useState(false);
+  const [ocrResults, setOcrResults] = useState<OcrResult[]>([]);
+  const [isMatchingOcr, setIsMatchingOcr] = useState(false);
+
+
   useEffect(() => {
-    // Fix for Error: Module '"firebase/auth"' has no exported member 'onAuthStateChanged'. Changed to auth.onAuthStateChanged.
     const unsubscribe = auth.onAuthStateChanged(user => {
       setCurrentUser(user);
       if (user) {
         setAppState(AppState.DASHBOARD);
       } else {
-        // Clear all user-specific state on logout
         setMealPlan([]);
         setShoppingList([]);
-        setAllSuggestedMeals([]);
+        setAdditionalExpenses([]);
         setMealIngredients({});
         setSavedPlans([]);
         setSelectedPlan(null);
@@ -72,11 +52,10 @@ export const useMealPlanner = () => {
         setIsDashboardLoading(false);
       }
     });
-    return () => unsubscribe(); // Cleanup subscription
+    return () => unsubscribe();
   }, []);
 
 
-  // Fetch user-specific data when currentUser is set
   useEffect(() => {
     const loadUserData = async () => {
         if (!currentUser) return;
@@ -84,7 +63,6 @@ export const useMealPlanner = () => {
         setIsDashboardLoading(true);
         setError(null);
         try {
-            // Force-refresh the token to ensure it's not stale.
             const idToken = await currentUser.getIdToken(true);
             const plansFromDb = await getSavedPlans(currentUser.uid, idToken);
             setSavedPlans(plansFromDb);
@@ -111,9 +89,7 @@ export const useMealPlanner = () => {
   
   const handleLogout = async () => {
     try {
-        // Fix for Error: Module '"firebase/auth"' has no exported member 'signOut'. Changed to auth.signOut().
         await auth.signOut();
-        // onAuthStateChanged will handle the rest
     } catch (error) {
         console.error("Error signing out: ", error);
         setError("ไม่สามารถออกจากระบบได้ กรุณาลองใหม่");
@@ -121,54 +97,83 @@ export const useMealPlanner = () => {
   };
 
 
-  const handleGeneratePlan = useCallback(async () => {
-    clearActivePlan(); // Clear any previous in-progress plan
+  const handleOpenNewPlanSettings = useCallback(() => {
+    clearActivePlan();
+    setError(null);
+    setIsSettingsModalOpen(true);
+  }, [clearActivePlan]);
+
+  const handleStartGeneration = useCallback(async (settings: PlannerSettings) => {
+    setIsSettingsModalOpen(false);
     setAppState(AppState.LOADING);
     setError(null);
     try {
-      const { mealPlan: newPlan, shoppingList: newShoppingList } = await generateInitialMealPlan();
-      const mergedPlan = mergeMealDays(newPlan);
-      setMealPlan(mergedPlan);
-      setShoppingList([]); // Shopping list is generated later
+      const { mealPlan: newPlan } = await generateInitialMealPlan(settings);
 
-      const uniqueMeals = mergedPlan.reduce((acc, day) => {
-        if (day.lunch?.name && !acc.some(meal => meal.name === day.lunch.name)) {
-          acc.push(day.lunch);
-        }
-        if (day.dinner?.name && !acc.some(meal => meal.name === day.dinner.name)) {
-          acc.push(day.dinner);
-        }
-        return acc;
-      }, [] as Meal[]);
-      setAllSuggestedMeals(uniqueMeals);
+      const planWithServings = newPlan.map(day => {
+        const newDay: MealDay = { day: day.day };
+        if (day.breakfast) newDay.breakfast = { ...day.breakfast, servings: 2 };
+        if (day.lunch) newDay.lunch = { ...day.lunch, servings: 2 };
+        if (day.dinner) newDay.dinner = { ...day.dinner, servings: 2 };
+        return newDay;
+      });
+
+      setMealPlan(planWithServings);
+      setShoppingList([]);
+      setAdditionalExpenses([]);
       setAppState(AppState.PLANNING);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred.');
       setAppState(AppState.DASHBOARD);
     }
-  }, [clearActivePlan]);
+  }, []);
 
-  const handleUpdateMeal = (dayIndex: number, mealType: 'lunch' | 'dinner', newMealName: string) => {
+  const handleUpdateMeal = (dayIndex: number, mealType: 'breakfast' | 'lunch' | 'dinner', newMealName: string) => {
     const updatedPlan = [...mealPlan];
      if (updatedPlan[dayIndex]) {
-        const meal = { name: newMealName };
+        let meal = updatedPlan[dayIndex][mealType];
+        if (!meal) {
+            meal = { name: newMealName, servings: 2 };
+        } else {
+            meal.name = newMealName;
+        }
         updatedPlan[dayIndex][mealType] = meal;
+        setMealPlan(updatedPlan);
     }
-    setMealPlan(updatedPlan);
   };
   
+  const handleUpdateServings = (dayIndex: number, mealType: 'breakfast' | 'lunch' | 'dinner', newServings: number) => {
+    const updatedPlan = [...mealPlan];
+    const day = updatedPlan[dayIndex];
+    if (day && day[mealType]) {
+        const validServings = Math.max(1, newServings);
+        day[mealType]!.servings = validServings;
+        setMealPlan([...updatedPlan]);
+    }
+  };
+
+  const handleAddMealToHistory = useCallback((mealName: string) => {
+    addMealToHistory(mealName);
+  }, []);
+
   const handleFinalizePlan = useCallback(async () => {
     setAppState(AppState.LOADING);
     setError(null);
     try {
       const { shoppingList: newShoppingList, mealIngredients: newMealIngredients } = await generateShoppingListAndIngredients(mealPlan);
-      setShoppingList(newShoppingList);
+      
+      const filteredShoppingList = newShoppingList.filter(item => item.usedIn && item.usedIn.length > 0);
+      const pricedShoppingList = filteredShoppingList.map(item => ({ ...item, price: 0 }));
+
+      setShoppingList(pricedShoppingList);
       setMealIngredients(newMealIngredients);
+      setAdditionalExpenses([]);
       
       const newActivePlan: ActivePlan = { 
         mealPlan, 
-        shoppingList: newShoppingList,
+        shoppingList: pricedShoppingList,
         mealIngredients: newMealIngredients,
+        additionalExpenses: [],
       };
       setActivePlan(newActivePlan);
       localStorage.setItem(ACTIVE_PLAN_STORAGE_KEY, JSON.stringify(newActivePlan));
@@ -192,6 +197,54 @@ export const useMealPlanner = () => {
         localStorage.setItem(ACTIVE_PLAN_STORAGE_KEY, JSON.stringify(updatedActivePlan));
     }
   };
+  
+  const handleToggleAllIngredients = () => {
+    const areAllChecked = shoppingList.length > 0 && shoppingList.every(item => item.checked);
+    const newCheckedState = !areAllChecked;
+    const updatedShoppingList = shoppingList.map(item => ({ ...item, checked: newCheckedState }));
+    setShoppingList(updatedShoppingList);
+
+    if (activePlan) {
+      const updatedActivePlan = { ...activePlan, shoppingList: updatedShoppingList };
+      setActivePlan(updatedActivePlan);
+      localStorage.setItem(ACTIVE_PLAN_STORAGE_KEY, JSON.stringify(updatedActivePlan));
+    }
+  };
+
+
+  const handleUpdateIngredientPrice = (itemName: string, price: number) => {
+    const updatedShoppingList = shoppingList.map(item => 
+      item.name === itemName ? { ...item, price: isNaN(price) ? 0 : price } : item
+    );
+    setShoppingList(updatedShoppingList);
+    if (activePlan) {
+        const updatedActivePlan = { ...activePlan, shoppingList: updatedShoppingList };
+        setActivePlan(updatedActivePlan);
+        localStorage.setItem(ACTIVE_PLAN_STORAGE_KEY, JSON.stringify(updatedActivePlan));
+    }
+  };
+
+  const handleAddAdditionalExpense = (expense: Omit<AdditionalExpense, 'id'>) => {
+    const newExpense = { ...expense, id: Date.now().toString() };
+    const newExpenses = [...additionalExpenses, newExpense];
+    setAdditionalExpenses(newExpenses);
+    if (activePlan) {
+        const updatedActivePlan = { ...activePlan, additionalExpenses: newExpenses };
+        setActivePlan(updatedActivePlan);
+        localStorage.setItem(ACTIVE_PLAN_STORAGE_KEY, JSON.stringify(updatedActivePlan));
+    }
+  };
+
+  const handleRemoveAdditionalExpense = (expenseId: string) => {
+    const newExpenses = additionalExpenses.filter(exp => exp.id !== expenseId);
+    setAdditionalExpenses(newExpenses);
+    if (activePlan) {
+        const updatedActivePlan = { ...activePlan, additionalExpenses: newExpenses };
+        setActivePlan(updatedActivePlan);
+        localStorage.setItem(ACTIVE_PLAN_STORAGE_KEY, JSON.stringify(updatedActivePlan));
+    }
+  };
+
 
   const handleSavePlan = async () => {
     if (!currentUser) {
@@ -207,22 +260,22 @@ export const useMealPlanner = () => {
             id: now.toISOString(),
             createdAt: now.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }),
             mealPlan: mealPlan,
-            mealIngredients: mealIngredients
+            mealIngredients: mealIngredients,
+            shoppingList: shoppingList,
+            additionalExpenses: additionalExpenses,
         };
         
-        // Force-refresh the token before saving.
         const idToken = await currentUser.getIdToken(true);
         await savePlan(newPlan, currentUser.uid, idToken);
         
         const updatedSavedPlans = [newPlan, ...savedPlans];
         setSavedPlans(updatedSavedPlans);
         
-        // Reset state for next planning session
         setMealPlan([]);
         setShoppingList([]);
-        setAllSuggestedMeals([]);
+        setAdditionalExpenses([]);
         setMealIngredients({});
-        clearActivePlan(); // Also clear active plan on save
+        clearActivePlan();
     } catch (err) {
         setError(err instanceof Error ? err.message : 'An unknown error occurred while saving.');
     } finally {
@@ -258,30 +311,117 @@ export const useMealPlanner = () => {
         setMealPlan(activePlan.mealPlan);
         setShoppingList(activePlan.shoppingList);
         setMealIngredients(activePlan.mealIngredients || {});
+        setAdditionalExpenses(activePlan.additionalExpenses || []);
         setAppState(AppState.SHOPPING_LIST);
     }
   }, [activePlan]);
+
+  // OCR Handlers
+  const handleProcessReceipt = async (imageFile: File) => {
+    setIsOcrLoading(true);
+    setOcrResults([]);
+    setError(null);
+    try {
+        const base64Image = await fileToBase64(imageFile);
+        const results = await processReceiptImage(base64Image, imageFile.type);
+        setOcrResults(results);
+    } catch (err) {
+        setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาดในการอ่านใบเสร็จ");
+    } finally {
+        setIsOcrLoading(false);
+    }
+  };
+
+  const handleApplyOcrResults = async (selectedItems: OcrResult[]): Promise<number> => {
+    if (selectedItems.length === 0) return 0;
+    
+    setIsMatchingOcr(true);
+    setError(null);
+    let matchedCount = 0;
+
+    try {
+      const uncheckedItems = shoppingList.filter(item => !item.checked);
+      const matchedPairs = await matchOcrItemsToShoppingList(selectedItems, uncheckedItems);
+      
+      const updatedShoppingList = [...shoppingList];
+
+      matchedPairs.forEach(pair => {
+        const ocrItem = selectedItems.find(item => item.name === pair.receiptItemName);
+        const itemIndex = updatedShoppingList.findIndex(item => item.name === pair.shoppingListItemName && !item.checked);
+
+        if (ocrItem && itemIndex !== -1) {
+            updatedShoppingList[itemIndex] = {
+                ...updatedShoppingList[itemIndex],
+                price: ocrItem.price,
+                checked: true,
+            };
+            matchedCount++;
+        }
+      });
+      
+      setShoppingList(updatedShoppingList);
+      if (activePlan) {
+          const updatedActivePlan = { ...activePlan, shoppingList: updatedShoppingList };
+          setActivePlan(updatedActivePlan);
+          localStorage.setItem(ACTIVE_PLAN_STORAGE_KEY, JSON.stringify(updatedActivePlan));
+      }
+      setIsOcrModalOpen(false);
+      return matchedCount;
+
+    } catch (err) {
+        setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาดในการจับคู่รายการ");
+        return 0; // Return 0 on error
+    } finally {
+        setIsMatchingOcr(false);
+    }
+  };
+  
+  const openOcrModal = () => {
+      setOcrResults([]);
+      setError(null);
+      setIsOcrModalOpen(true);
+  };
+  const closeOcrModal = () => setIsOcrModalOpen(false);
+
 
   return {
     appState,
     currentUser,
     mealPlan,
     shoppingList,
-    allSuggestedMeals,
+    additionalExpenses,
+    mealIngredients,
     error,
     savedPlans,
     selectedPlan,
     activePlan,
     isDashboardLoading,
+    isSettingsModalOpen,
+    isOcrModalOpen,
+    isOcrLoading,
+    ocrResults,
+    isMatchingOcr,
     handleLogout,
-    handleGeneratePlan,
+    handleOpenNewPlanSettings,
+    handleStartGeneration,
     handleUpdateMeal,
+    handleUpdateServings,
+    handleAddMealToHistory,
     handleFinalizePlan,
     toggleIngredientChecked,
+    handleToggleAllIngredients,
+    handleUpdateIngredientPrice,
+    handleAddAdditionalExpense,
+    handleRemoveAdditionalExpense,
     handleSavePlan,
     handleViewPlan,
     reset,
     navigateTo,
     handleContinuePlan,
+    handleProcessReceipt,
+    handleApplyOcrResults,
+    openOcrModal,
+    closeOcrModal,
+    closeSettingsModal: () => setIsSettingsModalOpen(false),
   };
 };

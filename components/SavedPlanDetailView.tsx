@@ -1,11 +1,65 @@
-import React, { useState } from 'react';
-import { SavedPlan, Meal, MealIngredientInfo } from '../types';
+import React, { useState, useMemo } from 'react';
+import { SavedPlan, Meal, MealIngredientInfo, Ingredient, AdditionalExpense } from '../types';
 import { MealIngredientsModal } from './MealIngredientsModal';
+import { ChefHatIcon } from './icons/ChefHatIcon';
 
 interface SavedPlanDetailViewProps {
   plan: SavedPlan;
   onBack: () => void;
 }
+
+const CostSummary: React.FC<{ shoppingList: Ingredient[], additionalExpenses: AdditionalExpense[] }> = ({ shoppingList, additionalExpenses }) => {
+    const shoppingListTotal = useMemo(() => (shoppingList || []).reduce((sum, item) => sum + (item.price || 0), 0), [shoppingList]);
+    const additionalExpensesTotal = useMemo(() => (additionalExpenses || []).reduce((sum, item) => sum + item.price, 0), [additionalExpenses]);
+    const grandTotal = shoppingListTotal + additionalExpensesTotal;
+
+    return (
+        <div className="mt-8 pt-6 border-t-2 border-dashed">
+            <h3 className="text-2xl font-bold text-gray-800 mb-4 text-center">สรุปค่าใช้จ่ายประจำสัปดาห์</h3>
+            <div className="max-w-md mx-auto space-y-4">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-bold text-gray-700 mb-2">ค่าวัตถุดิบ</h4>
+                    <ul className="space-y-1 text-sm max-h-40 overflow-y-auto pr-2">
+                        {(shoppingList || []).map((item, index) => (
+                            <li key={index} className="flex justify-between">
+                                <span className="text-gray-600">{item.name}</span>
+                                <span className="font-medium text-gray-700">{(item.price || 0).toFixed(2)} บาท</span>
+                            </li>
+                        ))}
+                    </ul>
+                     <div className="flex justify-between font-bold border-t pt-2 mt-2">
+                        <span>รวมค่าวัตถุดิบ</span>
+                        <span>{shoppingListTotal.toFixed(2)} บาท</span>
+                    </div>
+                </div>
+
+                 {(additionalExpenses || []).length > 0 && (
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                        <h4 className="font-bold text-gray-700 mb-2">รายจ่ายเพิ่มเติม</h4>
+                        <ul className="space-y-1 text-sm">
+                            {additionalExpenses.map((item, index) => (
+                                <li key={index} className="flex justify-between">
+                                    <span className="text-gray-600">{item.name}</span>
+                                    <span className="font-medium text-gray-700">{item.price.toFixed(2)} บาท</span>
+                                </li>
+                            ))}
+                        </ul>
+                        <div className="flex justify-between font-bold border-t pt-2 mt-2">
+                            <span>รวมรายจ่ายเพิ่มเติม</span>
+                            <span>{additionalExpensesTotal.toFixed(2)} บาท</span>
+                        </div>
+                    </div>
+                )}
+                
+                <div className="flex justify-between items-center text-xl p-4 bg-teal-50 rounded-lg">
+                    <span className="font-bold text-gray-800">ยอดรวมทั้งหมด:</span>
+                    <span className="font-bold text-teal-600">{grandTotal.toFixed(2)} บาท</span>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 export const SavedPlanDetailView: React.FC<SavedPlanDetailViewProps> = ({ plan, onBack }) => {
   const [modalData, setModalData] = useState<{ mealName: string, ingredients: MealIngredientInfo[] } | null>(null);
@@ -29,8 +83,18 @@ export const SavedPlanDetailView: React.FC<SavedPlanDetailViewProps> = ({ plan, 
           </div>
           <div className="space-y-4">
               {plan.mealPlan.map((day, index) => (
-                  <div key={index} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center bg-gray-50 p-3 rounded-lg">
+                  <div key={index} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-center bg-gray-50 p-3 rounded-lg">
                       <div className="font-bold text-gray-800 text-center sm:text-left">{day.day}</div>
+                       <div className="text-gray-600 text-center sm:text-left">
+                          <span className="mr-2">เช้า:</span> 
+                          <button 
+                            onClick={() => handleMealClick(day.breakfast)}
+                            disabled={!day.breakfast || !plan.mealIngredients[day.breakfast.name]}
+                            className="font-medium text-teal-600 hover:text-teal-800 disabled:text-gray-400 disabled:cursor-not-allowed"
+                          >
+                            {day.breakfast?.name || 'ไม่มีเมนู'}
+                          </button>
+                      </div>
                       <div className="text-gray-600 text-center sm:text-left">
                           <span className="mr-2">กลางวัน:</span> 
                           <button 
@@ -54,6 +118,9 @@ export const SavedPlanDetailView: React.FC<SavedPlanDetailViewProps> = ({ plan, 
                   </div>
               ))}
           </div>
+
+          <CostSummary shoppingList={plan.shoppingList || []} additionalExpenses={plan.additionalExpenses || []} />
+
           <div className="mt-10 flex justify-center">
               <button
                   onClick={onBack}
