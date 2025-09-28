@@ -1,75 +1,146 @@
+// Fix for multiple "Cannot find name" and "is not a module" errors.
+// This file was a placeholder and is now fully implemented.
 import React from 'react';
-import { SavedPlan, ActivePlan } from '../types';
+import { SavedPlan } from '../types';
 import { ChefHatIcon } from './icons/ChefHatIcon';
 
 interface DashboardViewProps {
   savedPlans: SavedPlan[];
-  activePlan: ActivePlan | null;
+  activePlan: SavedPlan | null;
   onNewPlan: () => void;
-  onViewPlan: (planId: string) => void;
-  onContinuePlan: () => void;
+  onViewPlan: (plan: SavedPlan) => void;
+  onContinuePlan: (plan: SavedPlan) => void;
+  error: string | null;
   isDashboardLoading: boolean;
-  error?: string | null;
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({ savedPlans, activePlan, onNewPlan, onViewPlan, onContinuePlan, isDashboardLoading, error }) => {
+const getPlanStatus = (planDates: string[] | undefined): { text: string; bgColor: string; textColor: string } | null => {
+    if (!planDates || planDates.length === 0) {
+        return null;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Dates from JSON are strings, convert them to Date objects for comparison
+    const start = new Date(planDates[0]);
+    const end = new Date(planDates[planDates.length - 1]);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+
+    if (end < today) {
+        return { text: 'สำเร็จแล้ว', bgColor: 'bg-green-100', textColor: 'text-green-800' };
+    }
+    if (start > today) {
+        return { text: 'สัปดาห์หน้า', bgColor: 'bg-yellow-100', textColor: 'text-yellow-800' };
+    }
+    return { text: 'สัปดาห์นี้', bgColor: 'bg-blue-100', textColor: 'text-blue-800' };
+};
+
+
+const PlanCard: React.FC<{ plan: SavedPlan, onSelect: (plan: SavedPlan) => void, actionLabel: string, actionClass: string }> = ({ plan, onSelect, actionLabel, actionClass }) => {
+    const status = getPlanStatus(plan.planDates);
+    return (
+        <div className="bg-white p-4 rounded-lg shadow-md flex justify-between items-center">
+            <div>
+                 <div className="flex items-center space-x-2 mb-1">
+                     <p className="font-semibold text-gray-800">แผนอาหาร</p>
+                     {status && (
+                        <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${status.bgColor} ${status.textColor}`}>
+                            {status.text}
+                        </span>
+                     )}
+                </div>
+                <p className="text-sm text-gray-600">
+                    {plan.planDates && plan.planDates.length > 0
+                        ? `${new Date(plan.planDates[0]).toLocaleDateString('th-TH', {day: 'numeric', month: 'short'})} - ${new Date(plan.planDates[plan.planDates.length - 1]).toLocaleDateString('th-TH', {day: 'numeric', month: 'short', year: 'numeric'})}`
+                        : plan.createdAt
+                    }
+                </p>
+            </div>
+            <button
+                onClick={() => onSelect(plan)}
+                className={`font-semibold py-2 px-4 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${actionClass}`}
+            >
+                {actionLabel}
+            </button>
+        </div>
+    );
+};
+
+
+export const DashboardView: React.FC<DashboardViewProps> = ({ savedPlans, activePlan, onNewPlan, onViewPlan, onContinuePlan, error, isDashboardLoading }) => {
+
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="text-center mb-10">
-        <h2 className="text-3xl font-extrabold text-gray-800">แดชบอร์ดแผนอาหาร</h2>
-        <p className="mt-2 text-lg text-gray-600">ดูแผนที่บันทึกไว้ หรือสร้างแผนใหม่สำหรับสัปดาห์นี้</p>
+      <div className="text-center mb-12">
+        <h1 className="text-4xl font-extrabold text-gray-800">AI Meal Planner</h1>
+        <p className="mt-4 text-xl text-gray-600">
+            วางแผนมื้ออาหารสำหรับสัปดาห์ของคุณอย่างง่ายดาย
+        </p>
       </div>
       
       {error && (
-        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-md" role="alert">
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-8 rounded-md" role="alert">
           <p className="font-bold">เกิดข้อผิดพลาด</p>
           <p>{error}</p>
         </div>
       )}
 
-      {activePlan && (
-        <div className="mb-10 bg-teal-50 border-2 border-teal-200 rounded-2xl p-6 text-center shadow-lg">
-          <h3 className="text-xl font-bold text-gray-800 mb-2">แผนที่กำลังดำเนินการ</h3>
-          <p className="text-gray-600 mb-4">คุณมีแผนที่ยังจัดทำไม่เสร็จ กลับไปทำต่อได้เลย</p>
-          <button
-            onClick={onContinuePlan}
-            className="bg-teal-500 text-white font-bold py-3 px-6 rounded-full text-lg hover:bg-teal-600 focus:outline-none focus:ring-4 focus:ring-teal-300 transform transition duration-300 ease-in-out hover:scale-105"
-          >
-            ไปที่รายการซื้อของต่อ
-          </button>
-        </div>
-      )}
-
-      <div className="mb-10 flex justify-center">
-        <button
-          onClick={onNewPlan}
-          className="bg-teal-600 text-white font-bold py-4 px-8 rounded-full text-lg hover:bg-teal-700 focus:outline-none focus:ring-4 focus:ring-teal-300 transform transition duration-300 ease-in-out hover:scale-105"
-        >
-          {activePlan ? 'สร้างแผนใหม่ (ทับแผนที่กำลังทำ)' : 'สร้างแผนอาหารสัปดาห์ใหม่'}
-        </button>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
-        <h3 className="text-xl font-bold text-gray-800 mb-4 border-b pb-2">แผนอาหารที่บันทึกไว้</h3>
-        {isDashboardLoading ? (
-             <p className="text-center text-gray-500 py-8">กำลังโหลดแผนอาหาร...</p>
-        ) : savedPlans.length > 0 ? (
-          <ul className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
-            {savedPlans.map(plan => (
-              <li key={plan.id}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+        {/* Left Column: New Plan & Active Plan */}
+        <div className="space-y-8">
+            <div className="bg-white p-6 rounded-xl shadow-lg text-center">
+                <div className="mx-auto bg-teal-100 rounded-full h-16 w-16 flex items-center justify-center mb-4">
+                    <ChefHatIcon className="h-9 w-9 text-teal-600" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">สร้างแผนใหม่</h2>
+                <p className="text-gray-600 mb-6">เริ่มวางแผนเมนูอาหารสำหรับสัปดาห์หน้าของคุณ</p>
                 <button
-                  onClick={() => onViewPlan(plan.id)}
-                  className="w-full text-left flex items-center p-4 bg-gray-50 hover:bg-teal-50 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    onClick={onNewPlan}
+                    className="w-full bg-teal-600 text-white font-bold py-3 px-6 rounded-full text-lg hover:bg-teal-700 focus:outline-none focus:ring-4 focus:ring-teal-300 transform transition duration-300 ease-in-out hover:scale-105"
                 >
-                  <ChefHatIcon className="h-6 w-6 text-teal-500 mr-4 flex-shrink-0" />
-                  <span className="font-semibold text-gray-700">แผนสำหรับสัปดาห์ของ {plan.createdAt}</span>
+                    เริ่มเลย
                 </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-center text-gray-500 py-8">คุณยังไม่มีแผนอาหารที่บันทึกไว้</p>
-        )}
+            </div>
+
+            {activePlan && (
+                <div className="bg-yellow-50 border-2 border-yellow-200 p-6 rounded-xl shadow-lg">
+                    <h2 className="text-2xl font-bold text-yellow-800 mb-3">แผนที่กำลังดำเนินการ</h2>
+                    <PlanCard 
+                        plan={activePlan} 
+                        onSelect={onContinuePlan} 
+                        actionLabel="ทำต่อ" 
+                        actionClass="bg-yellow-400 text-yellow-900 hover:bg-yellow-500 focus:ring-yellow-400"
+                    />
+                </div>
+            )}
+        </div>
+
+        {/* Right Column: Saved Plans */}
+        <div className="bg-white p-6 rounded-xl shadow-lg">
+             <h2 className="text-2xl font-bold text-gray-800 mb-4">แผนที่บันทึกไว้</h2>
+             {isDashboardLoading ? (
+                 <div className="flex justify-center items-center h-40">
+                     <div className="w-8 h-8 border-2 border-t-2 border-gray-200 border-t-teal-500 rounded-full animate-spin"></div>
+                     <p className="ml-3 text-gray-600">กำลังโหลด...</p>
+                 </div>
+             ) : savedPlans.length > 0 ? (
+                 <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                     {savedPlans.map(plan => (
+                        <PlanCard 
+                            key={plan.id} 
+                            plan={plan} 
+                            onSelect={onViewPlan} 
+                            actionLabel="ดูรายละเอียด" 
+                            actionClass="bg-gray-200 text-gray-700 hover:bg-gray-300 focus:ring-gray-400"
+                        />
+                     ))}
+                 </div>
+             ) : (
+                 <p className="text-gray-500 text-center py-10">คุณยังไม่มีแผนที่บันทึกไว้</p>
+             )}
+        </div>
       </div>
     </div>
   );

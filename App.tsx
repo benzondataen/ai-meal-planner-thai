@@ -4,7 +4,7 @@ import { MealPlanView } from './components/MealPlanView';
 import { ShoppingListView } from './components/ShoppingListView';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { useMealPlanner } from './hooks/useMealPlanner';
-import { Ad, AppState, MealIngredientInfo } from './types';
+import { Ad, AppState } from './types';
 import { DashboardView } from './components/DashboardView';
 import { SavedPlanDetailView } from './components/SavedPlanDetailView';
 import { LoginView } from './components/LoginView';
@@ -12,11 +12,13 @@ import { getAds } from './services/adsService';
 import { AdPopup } from './components/AdPopup';
 import { WeeklySummaryView } from './components/WeeklySummaryView';
 import { SettingsModal } from './components/SettingsModal';
+import { Feedback } from './components/Feedback';
 
 function App() {
     const {
         appState,
         currentUser,
+        idToken,
         mealPlan,
         shoppingList,
         additionalExpenses,
@@ -94,7 +96,6 @@ function App() {
             case AppState.SHOPPING_LIST:
                 return <ShoppingListView 
                     mealPlan={mealPlan}
-                    mealIngredients={mealIngredients as Record<string, MealIngredientInfo[]>}
                     shoppingList={shoppingList} 
                     additionalExpenses={additionalExpenses}
                     onToggleItem={toggleIngredientChecked} 
@@ -144,6 +145,10 @@ function App() {
                 onClose={closeSettingsModal}
                 onSubmit={handleStartGeneration}
             />
+
+            {currentUser && idToken && (
+                <Feedback user={currentUser} idToken={idToken} />
+            )}
 
             {/* Show overlays on top of the content */}
             {isLoading && (

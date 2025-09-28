@@ -1,28 +1,37 @@
+// Fix for multiple "Cannot find name" and "is not a module" errors.
+// This file was a placeholder and is now fully defined.
+
+export enum AppState {
+  AUTH_LOADING = 'AUTH_LOADING',
+  LOGIN = 'LOGIN',
+  DASHBOARD = 'DASHBOARD',
+  LOADING = 'LOADING',
+  PLANNING = 'PLANNING',
+  SHOPPING_LIST = 'SHOPPING_LIST',
+  ADAPT_PLAN = 'ADAPT_PLAN',
+  WEEKLY_SUMMARY = 'WEEKLY_SUMMARY',
+  VIEW_SAVED_PLAN = 'VIEW_SAVED_PLAN',
+}
+
 export interface Meal {
   name: string;
-  servings: number;
+  servings?: number;
 }
 
 export interface MealDay {
   day: string;
-  breakfast?: Meal;
-  lunch?: Meal;
-  dinner?: Meal;
+  breakfast?: Meal | null;
+  lunch?: Meal | null;
+  dinner?: Meal | null;
 }
 
 export interface Ingredient {
   name: string;
   quantity: string;
   category: string;
-  checked?: boolean;
+  checked: boolean;
+  price?: number;
   usedIn?: string[];
-  price?: number; // Price for the ingredient
-}
-
-export interface AdditionalExpense {
-    id: string; // Use a unique ID for list rendering, e.g., timestamp
-    name: string;
-    price: number;
 }
 
 export interface MealIngredientInfo {
@@ -31,35 +40,14 @@ export interface MealIngredientInfo {
 }
 
 export interface SavedPlan {
-    id: string; // ISO date string when created
-    createdAt: string; // User-friendly date string
-    mealPlan: MealDay[];
-    mealIngredients: Record<string, MealIngredientInfo[]>;
-    shoppingList: Ingredient[];
-    additionalExpenses: AdditionalExpense[];
-}
-
-export interface ActivePlan {
+    id: string;
+    createdAt: string;
     mealPlan: MealDay[];
     shoppingList: Ingredient[];
     mealIngredients: Record<string, MealIngredientInfo[]>;
     additionalExpenses: AdditionalExpense[];
-}
-
-export enum AppState {
-  AUTH_LOADING,
-  LOGIN,
-  DASHBOARD,
-  LOADING,
-  PLANNING,
-  SHOPPING_LIST,
-  WEEKLY_SUMMARY,
-  VIEW_SAVED_PLAN,
-}
-
-export interface Ad {
-  linkUrl: string;
-  imageUrl: string;
+    userId: string;
+    planDates: string[];
 }
 
 export interface OcrResult {
@@ -68,11 +56,36 @@ export interface OcrResult {
 }
 
 export interface MatchedItemPair {
-    receiptItemName: string;
-    shoppingListItemName: string;
+  receiptItemName: string;
+  shoppingListItemName: string;
+}
+
+export interface AdditionalExpense {
+  id: string;
+  name: string;
+  price: number;
+}
+
+export interface Ad {
+  linkUrl: string;
+  imageUrl: string;
 }
 
 export interface PlannerSettings {
-    dates: Date[];
-    meals: ('breakfast' | 'lunch' | 'dinner')[];
+  dates: Date[];
+  meals: ('breakfast' | 'lunch' | 'dinner')[];
+}
+
+export enum FeedbackTopic {
+  BUG = 'BUG',
+  SUGGESTION = 'SUGGESTION',
+  FEATURE_REQUEST = 'FEATURE_REQUEST'
+}
+
+export interface FeedbackData {
+  id?: string;
+  topic: FeedbackTopic;
+  details: string;
+  userId: string;
+  createdAt: string; // ISO string
 }

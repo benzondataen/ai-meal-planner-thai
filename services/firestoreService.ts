@@ -1,4 +1,4 @@
-import { SavedPlan } from '../types';
+import { SavedPlan, FeedbackData } from '../types';
 import { FIREBASE_PROJECT_ID } from '../firebase';
 
 const BASE_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
@@ -86,7 +86,7 @@ const fromFirestoreDocument = (doc: any): SavedPlan => {
 };
 
 // Converts a SavedPlan object into a Firestore document format for saving
-const toFirestoreDocument = (plan: Omit<SavedPlan, 'id'>) => {
+const toFirestoreDocument = (plan: Omit<SavedPlan, 'id'> | Omit<FeedbackData, 'id'>) => {
     const fields: { [key: string]: any } = {};
     for (const key in plan) {
         fields[key] = toFirestoreValue((plan as any)[key]);
@@ -144,5 +144,28 @@ export const savePlan = async (plan: SavedPlan, userId: string, idToken: string)
     } catch (error) {
         console.error("Error saving plan:", error);
         throw new Error("ไม่สามารถบันทึกแผนได้ กรุณาลองใหม่");
+    }
+};
+
+export const saveFeedback = async (feedback: Omit<FeedbackData, 'id'>, idToken: string): Promise<void> => {
+    try {
+        const firestoreDoc = toFirestoreDocument(feedback);
+        const response = await fetch(`${BASE_URL}/feedback`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify(firestoreDoc),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Firestore save feedback error:', errorData);
+            throw new Error('Failed to save feedback to Firestore.');
+        }
+    } catch (error) {
+        console.error("Error saving feedback:", error);
+        throw new Error("ไม่สามารถส่งข้อเสนอแนะได้ กรุณาลองใหม่");
     }
 };

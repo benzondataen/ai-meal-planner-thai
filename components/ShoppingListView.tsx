@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Ingredient, AppState, AdditionalExpense, OcrResult, MealDay, MealIngredientInfo } from '../types';
+import { Ingredient, AppState, AdditionalExpense, OcrResult, MealDay } from '../types';
 import { IngredientUsageModal } from './IngredientUsageModal';
 import { InfoIcon } from './icons/InfoIcon';
 import { OcrModal } from './OcrModal';
@@ -7,7 +7,6 @@ import { CameraIcon } from './icons/CameraIcon';
 
 interface ShoppingListViewProps {
   mealPlan: MealDay[];
-  mealIngredients: Record<string, MealIngredientInfo[]>;
   shoppingList: Ingredient[];
   additionalExpenses: AdditionalExpense[];
   onToggleItem: (itemName: string) => void;
@@ -83,7 +82,7 @@ const AddExpenseForm: React.FC<{ onAdd: (expense: Omit<AdditionalExpense, 'id'>)
 
 
 export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ 
-    mealPlan, mealIngredients, shoppingList, additionalExpenses, onToggleItem, onToggleAllItems, onNavigate, onSavePlan, onUpdateIngredientPrice, onAddAdditionalExpense, onRemoveAdditionalExpense,
+    mealPlan, shoppingList, additionalExpenses, onToggleItem, onToggleAllItems, onNavigate, onSavePlan, onUpdateIngredientPrice, onAddAdditionalExpense, onRemoveAdditionalExpense,
     isOcrModalOpen, isOcrLoading, isMatchingOcr, ocrResults, openOcrModal, closeOcrModal, handleProcessReceipt, handleApplyOcrResults
 }) => {
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
@@ -138,23 +137,38 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({
   };
 
   const handleShowUsage = (ingredientName: string) => {
-    const usage = new Map<string, number>();
-    if (!mealPlan || !mealIngredients) return;
+    // Find the specific ingredient in the main shopping list.
+    const ingredient = shoppingList.find(i => i.name === ingredientName);
+    
+    // The `usedIn` array is the source of truth for which meals use this ingredient.
+    const mealNamesUsedIn = ingredient?.usedIn || [];
 
-    for (const day of mealPlan) {
-      for (const mealType of ['breakfast', 'lunch', 'dinner'] as const) {
-        const meal = day[mealType];
-        if (!meal?.name) continue;
-
-        const ingredientsForMeal = mealIngredients[meal.name];
-        if (ingredientsForMeal?.some(ing => ing.name === ingredientName)) {
-          const currentTotal = usage.get(meal.name) || 0;
-          usage.set(meal.name, currentTotal + (meal.servings || 0));
-        }
-      }
+    // If the AI didn't associate this ingredient with any meal, show an empty list.
+    if (mealNamesUsedIn.length === 0) {
+        setModalData({ name: ingredientName, mealUsage: new Map() });
+        return;
     }
-    setModalData({ name: ingredientName, mealUsage: usage });
-  };
+
+    // Create a map to sum the total servings for each unique meal name.
+    const mealServingsCount = new Map<string, number>();
+
+    // Iterate through the entire meal plan to find all occurrences of the meals
+    // and sum their servings.
+    for (const day of mealPlan) {
+        for (const mealType of ['breakfast', 'lunch', 'dinner'] as const) {
+            const meal = day[mealType];
+            
+            // If the current meal from the plan is listed in our ingredient's `usedIn` array...
+            if (meal?.name && mealNamesUsedIn.includes(meal.name)) {
+                // ...add its servings to the total for that meal name.
+                const currentServings = mealServingsCount.get(meal.name) || 0;
+                mealServingsCount.set(meal.name, currentServings + (meal.servings || 0));
+            }
+        }
+    }
+
+    setModalData({ name: ingredientName, mealUsage: mealServingsCount });
+};
 
 
   return (
